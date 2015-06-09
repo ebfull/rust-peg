@@ -204,78 +204,97 @@ fn parse_rule<'input>(input: &'input str, state: &mut ParseState, pos: usize)
                             Matched(pos, cached) => {
                                 {
                                     let seq_res =
-                                        parse_identifier(input, state, pos);
+                                        parse_contextflag(input, state, pos);
                                     match seq_res {
-                                        Matched(pos, name) => {
+                                        Matched(pos, context) => {
                                             {
                                                 let seq_res =
-                                                    parse_returntype(input,
+                                                    parse_identifier(input,
                                                                      state,
                                                                      pos);
                                                 match seq_res {
-                                                    Matched(pos, returns) => {
+                                                    Matched(pos, name) => {
                                                         {
                                                             let seq_res =
-                                                                parse_equals(input,
-                                                                             state,
-                                                                             pos);
+                                                                parse_returntype(input,
+                                                                                 state,
+                                                                                 pos);
                                                             match seq_res {
                                                                 Matched(pos,
-                                                                        _) =>
-                                                                {
+                                                                        returns)
+                                                                => {
                                                                     {
                                                                         let seq_res =
-                                                                            parse_expression(input,
-                                                                                             state,
-                                                                                             pos);
+                                                                            parse_equals(input,
+                                                                                         state,
+                                                                                         pos);
                                                                         match seq_res
                                                                             {
                                                                             Matched(pos,
-                                                                                    expression)
+                                                                                    _)
                                                                             =>
                                                                             {
                                                                                 {
                                                                                     let seq_res =
-                                                                                        match parse_semicolon(input,
-                                                                                                              state,
-                                                                                                              pos)
-                                                                                            {
-                                                                                            Matched(newpos,
-                                                                                                    value)
-                                                                                            =>
-                                                                                            {
-                                                                                                Matched(newpos,
-                                                                                                        Some(value))
-                                                                                            }
-                                                                                            Failed
-                                                                                            =>
-                                                                                            {
-                                                                                                Matched(pos,
-                                                                                                        None)
-                                                                                            }
-                                                                                        };
+                                                                                        parse_expression(input,
+                                                                                                         state,
+                                                                                                         pos);
                                                                                     match seq_res
                                                                                         {
                                                                                         Matched(pos,
-                                                                                                _)
+                                                                                                expression)
                                                                                         =>
                                                                                         {
                                                                                             {
-                                                                                                let match_str =
-                                                                                                    &input[start_pos..pos];
-                                                                                                Matched(pos,
+                                                                                                let seq_res =
+                                                                                                    match parse_semicolon(input,
+                                                                                                                          state,
+                                                                                                                          pos)
                                                                                                         {
-                                                                                                            Rule{name:
-                                                                                                                     name,
-                                                                                                                 expr:
-                                                                                                                     box() expression,
-                                                                                                                 ret_type:
-                                                                                                                     returns,
-                                                                                                                 exported:
-                                                                                                                     exported,
-                                                                                                                 cached:
-                                                                                                                     cached,}
-                                                                                                        })
+                                                                                                        Matched(newpos,
+                                                                                                                value)
+                                                                                                        =>
+                                                                                                        {
+                                                                                                            Matched(newpos,
+                                                                                                                    Some(value))
+                                                                                                        }
+                                                                                                        Failed
+                                                                                                        =>
+                                                                                                        {
+                                                                                                            Matched(pos,
+                                                                                                                    None)
+                                                                                                        }
+                                                                                                    };
+                                                                                                match seq_res
+                                                                                                    {
+                                                                                                    Matched(pos,
+                                                                                                            _)
+                                                                                                    =>
+                                                                                                    {
+                                                                                                        {
+                                                                                                            let match_str =
+                                                                                                                &input[start_pos..pos];
+                                                                                                            Matched(pos,
+                                                                                                                    {
+                                                                                                                        Rule{name:
+                                                                                                                                 name,
+                                                                                                                             expr:
+                                                                                                                                 box() expression,
+                                                                                                                             ret_type:
+                                                                                                                                 returns,
+                                                                                                                             exported:
+                                                                                                                                 exported,
+                                                                                                                             cached:
+                                                                                                                                 cached,
+                                                                                                                             context:
+                                                                                                                                 context,}
+                                                                                                                    })
+                                                                                                        }
+                                                                                                    }
+                                                                                                    Failed
+                                                                                                    =>
+                                                                                                    Failed,
+                                                                                                }
                                                                                             }
                                                                                         }
                                                                                         Failed
@@ -377,6 +396,46 @@ fn parse_cacheflag<'input>(input: &'input str, state: &mut ParseState,
                 let start_pos = pos;
                 {
                     let seq_res = slice_eq(input, state, pos, "#[cache]");
+                    match seq_res {
+                        Matched(pos, _) => {
+                            {
+                                let seq_res = parse___(input, state, pos);
+                                match seq_res {
+                                    Matched(pos, _) => {
+                                        {
+                                            let match_str =
+                                                &input[start_pos..pos];
+                                            Matched(pos, { true })
+                                        }
+                                    }
+                                    Failed => Failed,
+                                }
+                            }
+                        }
+                        Failed => Failed,
+                    }
+                }
+            };
+        match choice_res {
+            Matched(pos, value) => Matched(pos, value),
+            Failed => {
+                let start_pos = pos;
+                {
+                    let match_str = &input[start_pos..pos];
+                    Matched(pos, { false })
+                }
+            }
+        }
+    }
+}
+fn parse_contextflag<'input>(input: &'input str, state: &mut ParseState,
+                             pos: usize) -> RuleResult<bool> {
+    {
+        let choice_res =
+            {
+                let start_pos = pos;
+                {
+                    let seq_res = slice_eq(input, state, pos, "#[context]");
                     match seq_res {
                         Matched(pos, _) => {
                             {

@@ -29,6 +29,7 @@ pub struct Rule {
 	pub ret_type: String,
 	pub exported: bool,
 	pub cached: bool,
+	pub context: bool
 }
 
 #[derive(Clone)]
