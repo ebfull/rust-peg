@@ -93,8 +93,17 @@ fn make_parse_state(ctxt: &rustast::ExtCtxt, rules: &[Rule]) -> Vec<rustast::P<r
 
 	let mut cache_fields: Vec<rustast::TokenTree> = Vec::new();
 	let mut cache_init: Vec<rustast::TokenTree> = Vec::new();
+	let mut ctx_fields: Vec<rustast::TokenTree> = Vec::new();
+	let mut ctx_init: Vec<rustast::TokenTree> = Vec::new();
 	for rule in rules {
-		if rule.cached {
+		if rule.context {
+			let name = rustast::str_to_ident(&format!("{}_ctx", rule.name));
+			let init_name = rustast::str_to_ident(&format!("spawn_context_{}", rule.name));
+			let rule_type = rustast::parse_type(ctxt, &format!("::std::rc::Rc<::std::cell::RefCell<{}>>", rule.ret_type));
+
+			ctx_fields.append(&mut quote_tokens!(ctxt, $name: $rule_type,));
+			ctx_init.append(&mut quote_tokens!(ctxt, $name: ::std::rc::Rc::new(::std::cell::RefCell::new($init_name("", 0).unwrap())),))
+		} else if rule.cached {
 			let name = rustast::str_to_ident(&format!("{}_cache", rule.name));
 			let map_type = rustast::parse_type(ctxt,
 				&format!("::std::collections::HashMap<usize, RuleResult<{}>>", rule.ret_type));
@@ -109,6 +118,7 @@ fn make_parse_state(ctxt: &rustast::ExtCtxt, rules: &[Rule]) -> Vec<rustast::P<r
 			max_err_pos: usize,
 			expected: ::std::collections::HashSet<&'static str>,
 			$cache_fields
+			$ctx_fields
 		}
 	).unwrap());
 
@@ -119,6 +129,7 @@ fn make_parse_state(ctxt: &rustast::ExtCtxt, rules: &[Rule]) -> Vec<rustast::P<r
 					max_err_pos: 0,
 					expected: ::std::collections::HashSet::new(),
 					$cache_init
+					$ctx_init
 				}
 			}
 			fn mark_failure(&mut self, pos: usize, expected: &'static str) -> RuleResult<()> {
@@ -161,6 +172,17 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 		enum RuleResult<T> {
 			Matched(usize, T),
 			Failed,
+		}
+	).unwrap());
+
+	items.push(quote_item!(ctxt,
+		impl<T> RuleResult<T> {
+			fn unwrap(self) -> T {
+				match self {
+					Matched(usize, a) => a,
+					Failed => panic!("Unwrap failed on RuleResult")
+				}
+			}
 		}
 	).unwrap());
 
@@ -280,26 +302,50 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 
 fn compile_rule(ctxt: &rustast::ExtCtxt, grammar: &Grammar, rule: &Rule) -> rustast::P<rustast::Item> {
 	let ref rule_name = rule.name;
-	let name = rustast::str_to_ident(&format!("parse_{}", rule.name));
+	let mut name;
+	let mut body;
+	if rule.context {
+		name = rustast::str_to_ident(&format!("spawn_context_{}", rule.name));
+		body = compile_action_expr(ctxt, grammar, &*rule.expr, (&rule.ret_type as &str) != "()");
+	} else {
+		name = rustast::str_to_ident(&format!("parse_{}", rule.name));
+		body = compile_expr(ctxt, grammar, &*rule.expr, (&rule.ret_type as &str) != "()");
+	}
 	let ret = rustast::parse_type(ctxt, &rule.ret_type);
-	let body = compile_expr(ctxt, grammar, &*rule.expr, (&rule.ret_type as &str) != "()");
 	let wrapped_body = if cfg!(feature = "trace") {
-		quote_expr!(ctxt, {
-			let (line, col) = pos_to_line(input, pos);
-			println!("[PEG_TRACE] Attempting to match rule {} at {}:{} (pos {})", $rule_name, line, col, pos);
-			let mut __peg_closure = || {
-				$body
-			};
-			let __peg_result = __peg_closure();
-			match __peg_result {
-				Matched(_, _) => println!("[PEG_TRACE] Matched rule {} at {}:{} (pos {})", $rule_name, line, col, pos),
-				Failed => println!("[PEG_TRACE] Failed to match rule {} at {}:{} (pos {})", $rule_name, line, col, pos)
-			}
-			__peg_result
-		})
+		if rule.context {
+			quote_expr!(ctxt, {
+				let (line, col) = pos_to_line(input, pos);
+				println!("[PEG_TRACE] Attempting to init context rule {} at {}:{} (pos {})", $rule_name, line, col, pos);
+				let mut __peg_closure = || {
+					$body
+				};
+				__peg_closure()
+			})
+		} else {
+			quote_expr!(ctxt, {
+				let (line, col) = pos_to_line(input, pos);
+				println!("[PEG_TRACE] Attempting to match rule {} at {}:{} (pos {})", $rule_name, line, col, pos);
+				let mut __peg_closure = || {
+					$body
+				};
+				let __peg_result = __peg_closure();
+				match __peg_result {
+					Matched(_, _) => println!("[PEG_TRACE] Matched rule {} at {}:{} (pos {})", $rule_name, line, col, pos),
+					Failed => println!("[PEG_TRACE] Failed to match rule {} at {}:{} (pos {})", $rule_name, line, col, pos)
+				}
+				__peg_result
+			})
+		}
 	} else { body };
 
-	if rule.cached {
+	if rule.context {
+		quote_item!(ctxt,
+			fn $name<'input>(input: &'input str, pos: usize) -> RuleResult<$ret> {
+				$wrapped_body
+			}
+		).unwrap()
+	} else if rule.cached {
 		let cache_field = rustast::str_to_ident(&format!("{}_cache", rule.name));
 
 		quote_item!(ctxt,
@@ -362,6 +408,18 @@ fn compile_match_and_then(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, 
 	})
 }
 
+fn compile_state_and_then(ctxt: &rustast::ExtCtxt, name: &str, then: rustast::P<rustast::Expr>) -> rustast::P<rustast::Expr> {
+	let ctx_name = rustast::str_to_ident(&format!("{}_ctx", name));
+	let name = rustast::str_to_ident(&format!("{}", name));
+
+	quote_expr!(ctxt, {
+		let $name = state.$ctx_name.clone();
+		let mut $name = $name.borrow_mut();
+		let $name = &mut*$name;
+		{ $then }
+	})
+}
+
 fn cond_swap<T>(swap: bool, tup: (T, T)) -> (T, T) {
 	let (a, b) = tup;
 	if swap {
@@ -387,6 +445,23 @@ fn format_char_set(invert: bool, cases: &[CharSetCase]) -> String {
 	}
 	r.push(']');
 	r
+}
+
+/// Compiles an ActionExpr only (with no expressions). Used for named functions.
+fn compile_action_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_used: bool) -> rustast::P<rustast::Expr> {
+	match *e {
+		ActionExpr(ref exprs, ref code, _) => {
+			if exprs.len() > 0 {
+				panic!("The grammar should not allow this to happen (exprs in context rule)")
+			}
+
+			let code_block = rustast::parse_block(ctxt, code);
+			quote_expr!(ctxt, {
+				Matched(pos, $code_block)
+			})
+		},
+		_ => {panic!("The grammar should not allow this to happen (not ActionExpr as context rule)")}
+	}
 }
 
 #[allow(unused_imports)] // quote_tokens! imports things
@@ -618,14 +693,19 @@ fn compile_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_use
 		}
 
 		ActionExpr(ref exprs, ref code, is_cond) => {
-			fn write_seq(ctxt: &rustast::ExtCtxt, grammar: &Grammar, exprs: &[TaggedExpr], code: &str, is_cond: bool) -> rustast::P<rustast::Expr> {
-				match exprs.first() {
+			fn write_ctx(ctxt: &rustast::ExtCtxt, grammar: &Grammar, rules: &[Rule], exprs: &[TaggedExpr], code: &str, is_cond: bool) -> rustast::P<rustast::Expr> {
+				match rules.first() {
 					Some(ref first) => {
-						let name = first.name.as_ref().map(|s| &s[..]);
-						compile_match_and_then(ctxt, grammar, &*first.expr, name,
-							write_seq(ctxt, grammar, exprs.tail(), code, is_cond)
-						)
-					}
+						let name = &first.name;
+
+						if first.context {
+							compile_state_and_then(ctxt, name,
+								write_ctx(ctxt, grammar, rules.tail(), exprs, code, is_cond)
+							)
+						} else {
+							write_ctx(ctxt, grammar, rules.tail(), exprs, code, is_cond)
+						}
+					},
 					None => {
 						let code_block = rustast::parse_block(ctxt, code);
 
@@ -651,7 +731,21 @@ fn compile_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_use
 				}
 			}
 
-			let body = write_seq(ctxt, grammar, &exprs, &code, is_cond);
+			fn write_seq(ctxt: &rustast::ExtCtxt, grammar: &Grammar, rules: &[Rule], exprs: &[TaggedExpr], code: &str, is_cond: bool) -> rustast::P<rustast::Expr> {
+				match exprs.first() {
+					Some(ref first) => {
+						let name = first.name.as_ref().map(|s| &s[..]);
+						compile_match_and_then(ctxt, grammar, &*first.expr, name,
+							write_seq(ctxt, grammar, rules, exprs.tail(), code, is_cond)
+						)
+					}
+					None => {
+						write_ctx(ctxt, grammar, rules, exprs, code, is_cond)
+					}
+				}
+			}
+
+			let body = write_seq(ctxt, grammar, &grammar.rules, &exprs, &code, is_cond);
 			quote_expr!(ctxt, {
 				let start_pos = pos;
 				$body

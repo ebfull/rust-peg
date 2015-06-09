@@ -13,6 +13,14 @@ fn char_range_at(s: &str, pos: usize) -> (char, usize) {
 }
 #[derive(Clone)]
 enum RuleResult<T> { Matched(usize, T), Failed, }
+impl <T> RuleResult<T> {
+    fn unwrap(self) -> T {
+        match self {
+            Matched(usize, a) => a,
+            Failed => panic!("Unwrap failed on RuleResult"),
+        }
+    }
+}
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct ParseError {
     pub line: usize,
