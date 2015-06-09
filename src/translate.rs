@@ -306,7 +306,7 @@ fn compile_rule(ctxt: &rustast::ExtCtxt, grammar: &Grammar, rule: &Rule) -> rust
 	let mut body;
 	if rule.context {
 		name = rustast::str_to_ident(&format!("spawn_context_{}", rule.name));
-		body = compile_action_expr(ctxt, grammar, &*rule.expr, (&rule.ret_type as &str) != "()");
+		body = compile_action_expr(ctxt, &*rule.expr);
 	} else {
 		name = rustast::str_to_ident(&format!("parse_{}", rule.name));
 		body = compile_expr(ctxt, grammar, &*rule.expr, (&rule.ret_type as &str) != "()");
@@ -448,7 +448,7 @@ fn format_char_set(invert: bool, cases: &[CharSetCase]) -> String {
 }
 
 /// Compiles an ActionExpr only (with no expressions). Used for named functions.
-fn compile_action_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_used: bool) -> rustast::P<rustast::Expr> {
+fn compile_action_expr(ctxt: &rustast::ExtCtxt, e: &Expr) -> rustast::P<rustast::Expr> {
 	match *e {
 		ActionExpr(ref exprs, ref code, _) => {
 			if exprs.len() > 0 {

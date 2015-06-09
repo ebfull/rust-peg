@@ -90,3 +90,8 @@ fn test_case_insensitive() {
 	assert!(case_insensitive(" foo").is_err());
 	assert!(case_insensitive("foo ").is_err());
 }
+
+#[test]
+fn test_context_object() {
+	assert_eq!(context_object("abcdef").unwrap(), 6);
+}

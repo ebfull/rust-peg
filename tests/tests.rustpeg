@@ -71,3 +71,13 @@ keyvals -> HashMap<i64, i64>
 
 keyval -> (i64, i64)
     = k:number ":" + v:number { (k, v) }
+
+#[context]
+test_ctx -> usize = {0}
+
+#[export]
+context_object -> usize
+	= context_chars+ { *test_ctx }
+
+context_chars -> ()
+	= . { *test_ctx = *test_ctx + 1; () }
