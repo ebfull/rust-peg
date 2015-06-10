@@ -99,10 +99,10 @@ fn make_parse_state(ctxt: &rustast::ExtCtxt, rules: &[Rule]) -> Vec<rustast::P<r
 		if rule.context {
 			let name = rustast::str_to_ident(&format!("{}_ctx", rule.name));
 			let init_name = rustast::str_to_ident(&format!("spawn_context_{}", rule.name));
-			let rule_type = rustast::parse_type(ctxt, &format!("::std::rc::Rc<::std::cell::RefCell<{}>>", rule.ret_type));
+			let rule_type = rustast::parse_type(ctxt, &format!("{}", rule.ret_type));
 
 			ctx_fields.append(&mut quote_tokens!(ctxt, $name: $rule_type,));
-			ctx_init.append(&mut quote_tokens!(ctxt, $name: ::std::rc::Rc::new(::std::cell::RefCell::new($init_name("", 0).unwrap())),))
+			ctx_init.append(&mut quote_tokens!(ctxt, $name: $init_name("", 0).unwrap(),));
 		} else if rule.cached {
 			let name = rustast::str_to_ident(&format!("{}_cache", rule.name));
 			let map_type = rustast::parse_type(ctxt,
@@ -118,6 +118,13 @@ fn make_parse_state(ctxt: &rustast::ExtCtxt, rules: &[Rule]) -> Vec<rustast::P<r
 			max_err_pos: usize,
 			expected: ::std::collections::HashSet<&'static str>,
 			$cache_fields
+			context: ::std::rc::Rc<::std::cell::RefCell<ContextObjects>>
+		}
+	).unwrap());
+
+	items.push(quote_item!(ctxt,
+		struct ContextObjects {
+			dummy: (), // empty dummy field, to prevent unit-like struct syntax error
 			$ctx_fields
 		}
 	).unwrap());
@@ -129,7 +136,10 @@ fn make_parse_state(ctxt: &rustast::ExtCtxt, rules: &[Rule]) -> Vec<rustast::P<r
 					max_err_pos: 0,
 					expected: ::std::collections::HashSet::new(),
 					$cache_init
-					$ctx_init
+					context: ::std::rc::Rc::new(::std::cell::RefCell::new(ContextObjects {
+						dummy: (),
+						$ctx_init
+					}))
 				}
 			}
 			fn mark_failure(&mut self, pos: usize, expected: &'static str) -> RuleResult<()> {
@@ -413,9 +423,7 @@ fn compile_state_and_then(ctxt: &rustast::ExtCtxt, name: &str, then: rustast::P<
 	let name = rustast::str_to_ident(&format!("{}", name));
 
 	quote_expr!(ctxt, {
-		let $name = state.$ctx_name.clone();
-		let mut $name = $name.borrow_mut();
-		let $name = &mut*$name;
+		let $name = &mut _context.$ctx_name;
 		{ $then }
 	})
 }
@@ -736,7 +744,14 @@ fn compile_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_use
 						)
 					}
 					None => {
-						write_ctx(ctxt, grammar, rules, exprs, code, is_cond)
+						let sub = write_ctx(ctxt, grammar, rules, exprs, code, is_cond);
+
+						quote_expr!(ctxt, {
+							let _context = state.context.clone();
+							let mut _context = &mut* _context.borrow_mut();
+
+							$sub
+						})
 					}
 				}
 			}

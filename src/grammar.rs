@@ -104,12 +104,19 @@ struct ParseState {
     max_err_pos: usize,
     expected: ::std::collections::HashSet<&'static str>,
     primary_cache: ::std::collections::HashMap<usize, RuleResult<Expr>>,
+    context: ::std::rc::Rc<::std::cell::RefCell<ContextObjects>>,
+}
+struct ContextObjects {
+    dummy: (),
 }
 impl ParseState {
     fn new() -> ParseState {
         ParseState{max_err_pos: 0,
                    expected: ::std::collections::HashSet::new(),
-                   primary_cache: ::std::collections::HashMap::new(),}
+                   primary_cache: ::std::collections::HashMap::new(),
+                   context:
+                       ::std::rc::Rc::new(::std::cell::RefCell::new(ContextObjects{dummy:
+                                                                                       (),})),}
     }
     fn mark_failure(&mut self, pos: usize, expected: &'static str)
      -> RuleResult<()> {
@@ -174,15 +181,21 @@ fn parse_grammar<'input>(input: &'input str, state: &mut ParseState,
                                     match seq_res {
                                         Matched(pos, rules) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            Grammar{imports:
-                                                                        imports,
-                                                                    rules:
-                                                                        rules,}
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                Grammar{imports:
+                                                                            imports,
+                                                                        rules:
+                                                                            rules,}
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -257,73 +270,79 @@ fn parse_rule<'input>(input: &'input str, state: &mut ParseState, pos: usize)
                                                                             =>
                                                                             {
                                                                                 {
-                                                                                    let match_str =
-                                                                                        &input[start_pos..pos];
-                                                                                    match {
-                                                                                              match {
-                                                                                                        match expression
-                                                                                                            {
-                                                                                                            ActionExpr(ref exprs,
-                                                                                                                       _,
-                                                                                                                       _)
-                                                                                                            =>
-                                                                                                            {
-                                                                                                                if attrs.2
-                                                                                                                       &&
-                                                                                                                       exprs.len()
-                                                                                                                           >
-                                                                                                                           0
-                                                                                                                   {
-                                                                                                                    Err("code block")
-                                                                                                                } else {
-                                                                                                                    Ok(())
+                                                                                    let _context =
+                                                                                        state.context.clone();
+                                                                                    let mut _context =
+                                                                                        &mut *_context.borrow_mut();
+                                                                                    {
+                                                                                        let match_str =
+                                                                                            &input[start_pos..pos];
+                                                                                        match {
+                                                                                                  match {
+                                                                                                            match expression
+                                                                                                                {
+                                                                                                                ActionExpr(ref exprs,
+                                                                                                                           _,
+                                                                                                                           _)
+                                                                                                                =>
+                                                                                                                {
+                                                                                                                    if attrs.2
+                                                                                                                           &&
+                                                                                                                           exprs.len()
+                                                                                                                               >
+                                                                                                                               0
+                                                                                                                       {
+                                                                                                                        Err("code block")
+                                                                                                                    } else {
+                                                                                                                        Ok(())
+                                                                                                                    }
                                                                                                                 }
-                                                                                                            }
-                                                                                                            _
-                                                                                                            =>
-                                                                                                            {
-                                                                                                                if attrs.2
-                                                                                                                   {
-                                                                                                                    Err("code block")
-                                                                                                                } else {
-                                                                                                                    Ok(())
+                                                                                                                _
+                                                                                                                =>
+                                                                                                                {
+                                                                                                                    if attrs.2
+                                                                                                                       {
+                                                                                                                        Err("code block")
+                                                                                                                    } else {
+                                                                                                                        Ok(())
+                                                                                                                    }
                                                                                                                 }
                                                                                                             }
                                                                                                         }
-                                                                                                    }
-                                                                                                  {
-                                                                                                  Ok(_)
-                                                                                                  =>
-                                                                                                  {
-                                                                                                      Ok(Rule{name:
-                                                                                                                  name,
-                                                                                                              expr:
-                                                                                                                  box() expression,
-                                                                                                              ret_type:
-                                                                                                                  returns,
-                                                                                                              exported:
-                                                                                                                  attrs.0,
-                                                                                                              cached:
-                                                                                                                  attrs.1,
-                                                                                                              context:
-                                                                                                                  attrs.2,})
+                                                                                                      {
+                                                                                                      Ok(_)
+                                                                                                      =>
+                                                                                                      {
+                                                                                                          Ok(Rule{name:
+                                                                                                                      name,
+                                                                                                                  expr:
+                                                                                                                      box() expression,
+                                                                                                                  ret_type:
+                                                                                                                      returns,
+                                                                                                                  exported:
+                                                                                                                      attrs.0,
+                                                                                                                  cached:
+                                                                                                                      attrs.1,
+                                                                                                                  context:
+                                                                                                                      attrs.2,})
+                                                                                                      }
+                                                                                                      Err(e)
+                                                                                                      =>
+                                                                                                      Err(e),
                                                                                                   }
-                                                                                                  Err(e)
-                                                                                                  =>
-                                                                                                  Err(e),
                                                                                               }
-                                                                                          }
-                                                                                        {
-                                                                                        Ok(res)
-                                                                                        =>
-                                                                                        Matched(pos,
-                                                                                                res),
-                                                                                        Err(expected)
-                                                                                        =>
-                                                                                        {
-                                                                                            state.mark_failure(pos,
-                                                                                                               expected);
-                                                                                            Failed
+                                                                                            {
+                                                                                            Ok(res)
+                                                                                            =>
+                                                                                            Matched(pos,
+                                                                                                    res),
+                                                                                            Err(expected)
+                                                                                            =>
+                                                                                            {
+                                                                                                state.mark_failure(pos,
+                                                                                                                   expected);
+                                                                                                Failed
+                                                                                            }
                                                                                         }
                                                                                     }
                                                                                 }
@@ -380,9 +399,15 @@ fn parse_exportflag<'input>(input: &'input str, state: &mut ParseState,
                                 match seq_res {
                                     Matched(pos, _) => {
                                         {
-                                            let match_str =
-                                                &input[start_pos..pos];
-                                            Matched(pos, { true })
+                                            let _context =
+                                                state.context.clone();
+                                            let mut _context =
+                                                &mut *_context.borrow_mut();
+                                            {
+                                                let match_str =
+                                                    &input[start_pos..pos];
+                                                Matched(pos, { true })
+                                            }
                                         }
                                     }
                                     Failed => Failed,
@@ -402,8 +427,13 @@ fn parse_exportflag<'input>(input: &'input str, state: &mut ParseState,
                     match seq_res {
                         Matched(pos, _) => {
                             {
-                                let match_str = &input[start_pos..pos];
-                                Matched(pos, { false })
+                                let _context = state.context.clone();
+                                let mut _context =
+                                    &mut *_context.borrow_mut();
+                                {
+                                    let match_str = &input[start_pos..pos];
+                                    Matched(pos, { false })
+                                }
                             }
                         }
                         Failed => Failed,
@@ -428,9 +458,15 @@ fn parse_cacheflag<'input>(input: &'input str, state: &mut ParseState,
                                 match seq_res {
                                     Matched(pos, _) => {
                                         {
-                                            let match_str =
-                                                &input[start_pos..pos];
-                                            Matched(pos, { true })
+                                            let _context =
+                                                state.context.clone();
+                                            let mut _context =
+                                                &mut *_context.borrow_mut();
+                                            {
+                                                let match_str =
+                                                    &input[start_pos..pos];
+                                                Matched(pos, { true })
+                                            }
                                         }
                                     }
                                     Failed => Failed,
@@ -446,8 +482,12 @@ fn parse_cacheflag<'input>(input: &'input str, state: &mut ParseState,
             Failed => {
                 let start_pos = pos;
                 {
-                    let match_str = &input[start_pos..pos];
-                    Matched(pos, { false })
+                    let _context = state.context.clone();
+                    let mut _context = &mut *_context.borrow_mut();
+                    {
+                        let match_str = &input[start_pos..pos];
+                        Matched(pos, { false })
+                    }
                 }
             }
         }
@@ -468,9 +508,15 @@ fn parse_contextflag<'input>(input: &'input str, state: &mut ParseState,
                                 match seq_res {
                                     Matched(pos, _) => {
                                         {
-                                            let match_str =
-                                                &input[start_pos..pos];
-                                            Matched(pos, { true })
+                                            let _context =
+                                                state.context.clone();
+                                            let mut _context =
+                                                &mut *_context.borrow_mut();
+                                            {
+                                                let match_str =
+                                                    &input[start_pos..pos];
+                                                Matched(pos, { true })
+                                            }
                                         }
                                     }
                                     Failed => Failed,
@@ -486,8 +532,12 @@ fn parse_contextflag<'input>(input: &'input str, state: &mut ParseState,
             Failed => {
                 let start_pos = pos;
                 {
-                    let match_str = &input[start_pos..pos];
-                    Matched(pos, { false })
+                    let _context = state.context.clone();
+                    let mut _context = &mut *_context.borrow_mut();
+                    {
+                        let match_str = &input[start_pos..pos];
+                        Matched(pos, { false })
+                    }
                 }
             }
         }
@@ -512,26 +562,33 @@ fn parse_rule_attributes<'input>(input: &'input str, state: &mut ParseState,
                                     match seq_res {
                                         Matched(pos, cached) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                match {
-                                                          if context &&
-                                                                 (exported ||
-                                                                      cached)
-                                                             {
-                                                              Err("attributes")
-                                                          } else {
-                                                              Ok((exported,
-                                                                  cached,
-                                                                  context))
-                                                          }
-                                                      } {
-                                                    Ok(res) =>
-                                                    Matched(pos, res),
-                                                    Err(expected) => {
-                                                        state.mark_failure(pos,
-                                                                           expected);
-                                                        Failed
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    match {
+                                                              if context &&
+                                                                     (exported
+                                                                          ||
+                                                                          cached)
+                                                                 {
+                                                                  Err("attributes")
+                                                              } else {
+                                                                  Ok((exported,
+                                                                      cached,
+                                                                      context))
+                                                              }
+                                                          } {
+                                                        Ok(res) =>
+                                                        Matched(pos, res),
+                                                        Err(expected) => {
+                                                            state.mark_failure(pos,
+                                                                               expected);
+                                                            Failed
+                                                        }
                                                     }
                                                 }
                                             }
@@ -570,12 +627,18 @@ fn parse_returntype<'input>(input: &'input str, state: &mut ParseState,
                                             match seq_res {
                                                 Matched(pos, _) => {
                                                     {
-                                                        let match_str =
-                                                            &input[start_pos..pos];
-                                                        Matched(pos,
-                                                                {
-                                                                    match_str.trim().to_string()
-                                                                })
+                                                        let _context =
+                                                            state.context.clone();
+                                                        let mut _context =
+                                                            &mut *_context.borrow_mut();
+                                                        {
+                                                            let match_str =
+                                                                &input[start_pos..pos];
+                                                            Matched(pos,
+                                                                    {
+                                                                        match_str.trim().to_string()
+                                                                    })
+                                                        }
                                                     }
                                                 }
                                                 Failed => Failed,
@@ -585,9 +648,15 @@ fn parse_returntype<'input>(input: &'input str, state: &mut ParseState,
                                 match seq_res {
                                     Matched(pos, tp) => {
                                         {
-                                            let match_str =
-                                                &input[start_pos..pos];
-                                            Matched(pos, { tp })
+                                            let _context =
+                                                state.context.clone();
+                                            let mut _context =
+                                                &mut *_context.borrow_mut();
+                                            {
+                                                let match_str =
+                                                    &input[start_pos..pos];
+                                                Matched(pos, { tp })
+                                            }
                                         }
                                     }
                                     Failed => Failed,
@@ -603,8 +672,12 @@ fn parse_returntype<'input>(input: &'input str, state: &mut ParseState,
             Failed => {
                 let start_pos = pos;
                 {
-                    let match_str = &input[start_pos..pos];
-                    Matched(pos, { "()".to_string() })
+                    let _context = state.context.clone();
+                    let mut _context = &mut *_context.borrow_mut();
+                    {
+                        let match_str = &input[start_pos..pos];
+                        Matched(pos, { "()".to_string() })
+                    }
                 }
             }
         }
@@ -687,12 +760,18 @@ fn parse_rust_use<'input>(input: &'input str, state: &mut ParseState,
                                                                                                                         =>
                                                                                                                         {
                                                                                                                             {
-                                                                                                                                let match_str =
-                                                                                                                                    &input[start_pos..pos];
-                                                                                                                                Matched(pos,
-                                                                                                                                        {
-                                                                                                                                            RustUseGlob(p.clone())
-                                                                                                                                        })
+                                                                                                                                let _context =
+                                                                                                                                    state.context.clone();
+                                                                                                                                let mut _context =
+                                                                                                                                    &mut *_context.borrow_mut();
+                                                                                                                                {
+                                                                                                                                    let match_str =
+                                                                                                                                        &input[start_pos..pos];
+                                                                                                                                    Matched(pos,
+                                                                                                                                            {
+                                                                                                                                                RustUseGlob(p.clone())
+                                                                                                                                            })
+                                                                                                                                }
                                                                                                                             }
                                                                                                                         }
                                                                                                                         Failed
@@ -895,13 +974,19 @@ fn parse_rust_use<'input>(input: &'input str, state: &mut ParseState,
                                                                                                                                                                     =>
                                                                                                                                                                     {
                                                                                                                                                                         {
-                                                                                                                                                                            let match_str =
-                                                                                                                                                                                &input[start_pos..pos];
-                                                                                                                                                                            Matched(pos,
-                                                                                                                                                                                    {
-                                                                                                                                                                                        RustUseList(p.clone(),
-                                                                                                                                                                                                    names)
-                                                                                                                                                                                    })
+                                                                                                                                                                            let _context =
+                                                                                                                                                                                state.context.clone();
+                                                                                                                                                                            let mut _context =
+                                                                                                                                                                                &mut *_context.borrow_mut();
+                                                                                                                                                                            {
+                                                                                                                                                                                let match_str =
+                                                                                                                                                                                    &input[start_pos..pos];
+                                                                                                                                                                                Matched(pos,
+                                                                                                                                                                                        {
+                                                                                                                                                                                            RustUseList(p.clone(),
+                                                                                                                                                                                                        names)
+                                                                                                                                                                                        })
+                                                                                                                                                                            }
                                                                                                                                                                         }
                                                                                                                                                                     }
                                                                                                                                                                     Failed
@@ -971,12 +1056,18 @@ fn parse_rust_use<'input>(input: &'input str, state: &mut ParseState,
                                                                                             =>
                                                                                             {
                                                                                                 {
-                                                                                                    let match_str =
-                                                                                                        &input[start_pos..pos];
-                                                                                                    Matched(pos,
-                                                                                                            {
-                                                                                                                RustUseSimple(p.clone())
-                                                                                                            })
+                                                                                                    let _context =
+                                                                                                        state.context.clone();
+                                                                                                    let mut _context =
+                                                                                                        &mut *_context.borrow_mut();
+                                                                                                    {
+                                                                                                        let match_str =
+                                                                                                            &input[start_pos..pos];
+                                                                                                        Matched(pos,
+                                                                                                                {
+                                                                                                                    RustUseSimple(p.clone())
+                                                                                                                })
+                                                                                                    }
                                                                                                 }
                                                                                             }
                                                                                             Failed
@@ -1017,12 +1108,18 @@ fn parse_rust_use<'input>(input: &'input str, state: &mut ParseState,
                                                                                         =>
                                                                                         {
                                                                                             {
-                                                                                                let match_str =
-                                                                                                    &input[start_pos..pos];
-                                                                                                Matched(pos,
-                                                                                                        {
-                                                                                                            v
-                                                                                                        })
+                                                                                                let _context =
+                                                                                                    state.context.clone();
+                                                                                                let mut _context =
+                                                                                                    &mut *_context.borrow_mut();
+                                                                                                {
+                                                                                                    let match_str =
+                                                                                                        &input[start_pos..pos];
+                                                                                                    Matched(pos,
+                                                                                                            {
+                                                                                                                v
+                                                                                                            })
+                                                                                                }
                                                                                             }
                                                                                         }
                                                                                         Failed
@@ -1104,8 +1201,12 @@ fn parse_rust_path<'input>(input: &'input str, state: &mut ParseState,
             match seq_res {
                 Matched(pos, _) => {
                     {
-                        let match_str = &input[start_pos..pos];
-                        Matched(pos, { match_str.to_string() })
+                        let _context = state.context.clone();
+                        let mut _context = &mut *_context.borrow_mut();
+                        {
+                            let match_str = &input[start_pos..pos];
+                            Matched(pos, { match_str.to_string() })
+                        }
                     }
                 }
                 Failed => Failed,
@@ -1669,12 +1770,18 @@ fn parse_choice<'input>(input: &'input str, state: &mut ParseState,
                                                                         s) =>
                                                                 {
                                                                     {
-                                                                        let match_str =
-                                                                            &input[start_pos..pos];
-                                                                        Matched(pos,
-                                                                                {
-                                                                                    s
-                                                                                })
+                                                                        let _context =
+                                                                            state.context.clone();
+                                                                        let mut _context =
+                                                                            &mut *_context.borrow_mut();
+                                                                        {
+                                                                            let match_str =
+                                                                                &input[start_pos..pos];
+                                                                            Matched(pos,
+                                                                                    {
+                                                                                        s
+                                                                                    })
+                                                                        }
                                                                     }
                                                                 }
                                                                 Failed =>
@@ -1699,15 +1806,21 @@ fn parse_choice<'input>(input: &'input str, state: &mut ParseState,
                         match seq_res {
                             Matched(pos, tail) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos,
-                                            {
-                                                if tail.len() > 0 {
-                                                    let mut list = tail;
-                                                    list.insert(0, head);
-                                                    ChoiceExpr(list)
-                                                } else { head }
-                                            })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos,
+                                                {
+                                                    if tail.len() > 0 {
+                                                        let mut list = tail;
+                                                        list.insert(0, head);
+                                                        ChoiceExpr(list)
+                                                    } else { head }
+                                                })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -1751,14 +1864,20 @@ fn parse_sequence<'input>(input: &'input str, state: &mut ParseState,
                                 match seq_res {
                                     Matched(pos, code) => {
                                         {
-                                            let match_str =
-                                                &input[start_pos..pos];
-                                            Matched(pos,
-                                                    {
-                                                        ActionExpr(elements,
-                                                                   code.0,
-                                                                   code.1)
-                                                    })
+                                            let _context =
+                                                state.context.clone();
+                                            let mut _context =
+                                                &mut *_context.borrow_mut();
+                                            {
+                                                let match_str =
+                                                    &input[start_pos..pos];
+                                                Matched(pos,
+                                                        {
+                                                            ActionExpr(elements,
+                                                                       code.0,
+                                                                       code.1)
+                                                        })
+                                            }
                                         }
                                     }
                                     Failed => Failed,
@@ -1795,15 +1914,20 @@ fn parse_sequence<'input>(input: &'input str, state: &mut ParseState,
                     match seq_res {
                         Matched(pos, elements) => {
                             {
-                                let match_str = &input[start_pos..pos];
-                                Matched(pos,
-                                        {
-                                            if elements.len() != 1 {
-                                                SequenceExpr(elements)
-                                            } else {
-                                                elements.into_iter().next().unwrap()
-                                            }
-                                        })
+                                let _context = state.context.clone();
+                                let mut _context =
+                                    &mut *_context.borrow_mut();
+                                {
+                                    let match_str = &input[start_pos..pos];
+                                    Matched(pos,
+                                            {
+                                                if elements.len() != 1 {
+                                                    SequenceExpr(elements)
+                                                } else {
+                                                    elements.into_iter().next().unwrap()
+                                                }
+                                            })
+                                }
                             }
                         }
                         Failed => Failed,
@@ -1834,15 +1958,21 @@ fn parse_labeled<'input>(input: &'input str, state: &mut ParseState,
                                             match seq_res {
                                                 Matched(pos, expression) => {
                                                     {
-                                                        let match_str =
-                                                            &input[start_pos..pos];
-                                                        Matched(pos,
-                                                                {
-                                                                    TaggedExpr{name:
-                                                                                   Some(label),
-                                                                               expr:
-                                                                                   box() expression,}
-                                                                })
+                                                        let _context =
+                                                            state.context.clone();
+                                                        let mut _context =
+                                                            &mut *_context.borrow_mut();
+                                                        {
+                                                            let match_str =
+                                                                &input[start_pos..pos];
+                                                            Matched(pos,
+                                                                    {
+                                                                        TaggedExpr{name:
+                                                                                       Some(label),
+                                                                                   expr:
+                                                                                       box() expression,}
+                                                                    })
+                                                        }
                                                     }
                                                 }
                                                 Failed => Failed,
@@ -1866,12 +1996,17 @@ fn parse_labeled<'input>(input: &'input str, state: &mut ParseState,
                     match seq_res {
                         Matched(pos, expr) => {
                             {
-                                let match_str = &input[start_pos..pos];
-                                Matched(pos,
-                                        {
-                                            TaggedExpr{name: None,
-                                                       expr: box() expr,}
-                                        })
+                                let _context = state.context.clone();
+                                let mut _context =
+                                    &mut *_context.borrow_mut();
+                                {
+                                    let match_str = &input[start_pos..pos];
+                                    Matched(pos,
+                                            {
+                                                TaggedExpr{name: None,
+                                                           expr: box() expr,}
+                                            })
+                                }
                             }
                         }
                         Failed => Failed,
@@ -1897,9 +2032,15 @@ fn parse_prefixed<'input>(input: &'input str, state: &mut ParseState,
                                 match seq_res {
                                     Matched(pos, expression) => {
                                         {
-                                            let match_str =
-                                                &input[start_pos..pos];
-                                            Matched(pos, { expression })
+                                            let _context =
+                                                state.context.clone();
+                                            let mut _context =
+                                                &mut *_context.borrow_mut();
+                                            {
+                                                let match_str =
+                                                    &input[start_pos..pos];
+                                                Matched(pos, { expression })
+                                            }
                                         }
                                     }
                                     Failed => Failed,
@@ -1926,12 +2067,18 @@ fn parse_prefixed<'input>(input: &'input str, state: &mut ParseState,
                                         match seq_res {
                                             Matched(pos, expression) => {
                                                 {
-                                                    let match_str =
-                                                        &input[start_pos..pos];
-                                                    Matched(pos,
-                                                            {
-                                                                PosAssertExpr(box() expression)
-                                                            })
+                                                    let _context =
+                                                        state.context.clone();
+                                                    let mut _context =
+                                                        &mut *_context.borrow_mut();
+                                                    {
+                                                        let match_str =
+                                                            &input[start_pos..pos];
+                                                        Matched(pos,
+                                                                {
+                                                                    PosAssertExpr(box() expression)
+                                                                })
+                                                    }
                                                 }
                                             }
                                             Failed => Failed,
@@ -1962,12 +2109,18 @@ fn parse_prefixed<'input>(input: &'input str, state: &mut ParseState,
                                                     Matched(pos, expression)
                                                     => {
                                                         {
-                                                            let match_str =
-                                                                &input[start_pos..pos];
-                                                            Matched(pos,
-                                                                    {
-                                                                        NegAssertExpr(box() expression)
-                                                                    })
+                                                            let _context =
+                                                                state.context.clone();
+                                                            let mut _context =
+                                                                &mut *_context.borrow_mut();
+                                                            {
+                                                                let match_str =
+                                                                    &input[start_pos..pos];
+                                                                Matched(pos,
+                                                                        {
+                                                                            NegAssertExpr(box() expression)
+                                                                        })
+                                                            }
                                                         }
                                                     }
                                                     Failed => Failed,
@@ -2011,12 +2164,18 @@ fn parse_suffixed<'input>(input: &'input str, state: &mut ParseState,
                                 match seq_res {
                                     Matched(pos, _) => {
                                         {
-                                            let match_str =
-                                                &input[start_pos..pos];
-                                            Matched(pos,
-                                                    {
-                                                        OptionalExpr(box() expression)
-                                                    })
+                                            let _context =
+                                                state.context.clone();
+                                            let mut _context =
+                                                &mut *_context.borrow_mut();
+                                            {
+                                                let match_str =
+                                                    &input[start_pos..pos];
+                                                Matched(pos,
+                                                        {
+                                                            OptionalExpr(box() expression)
+                                                        })
+                                            }
                                         }
                                     }
                                     Failed => Failed,
@@ -2061,15 +2220,21 @@ fn parse_suffixed<'input>(input: &'input str, state: &mut ParseState,
                                                     match seq_res {
                                                         Matched(pos, sep) => {
                                                             {
-                                                                let match_str =
-                                                                    &input[start_pos..pos];
-                                                                Matched(pos,
-                                                                        {
-                                                                            Repeat(box() expression,
-                                                                                   0,
-                                                                                   None,
-                                                                                   Some(box() sep))
-                                                                        })
+                                                                let _context =
+                                                                    state.context.clone();
+                                                                let mut _context =
+                                                                    &mut *_context.borrow_mut();
+                                                                {
+                                                                    let match_str =
+                                                                        &input[start_pos..pos];
+                                                                    Matched(pos,
+                                                                            {
+                                                                                Repeat(box() expression,
+                                                                                       0,
+                                                                                       None,
+                                                                                       Some(box() sep))
+                                                                            })
+                                                                }
                                                             }
                                                         }
                                                         Failed => Failed,
@@ -2122,15 +2287,21 @@ fn parse_suffixed<'input>(input: &'input str, state: &mut ParseState,
                                                                         sep)
                                                                 => {
                                                                     {
-                                                                        let match_str =
-                                                                            &input[start_pos..pos];
-                                                                        Matched(pos,
-                                                                                {
-                                                                                    Repeat(box() expression,
-                                                                                           1,
-                                                                                           None,
-                                                                                           Some(box() sep))
-                                                                                })
+                                                                        let _context =
+                                                                            state.context.clone();
+                                                                        let mut _context =
+                                                                            &mut *_context.borrow_mut();
+                                                                        {
+                                                                            let match_str =
+                                                                                &input[start_pos..pos];
+                                                                            Matched(pos,
+                                                                                    {
+                                                                                        Repeat(box() expression,
+                                                                                               1,
+                                                                                               None,
+                                                                                               Some(box() sep))
+                                                                                    })
+                                                                        }
                                                                     }
                                                                 }
                                                                 Failed =>
@@ -2172,15 +2343,21 @@ fn parse_suffixed<'input>(input: &'input str, state: &mut ParseState,
                                                             Matched(pos, _) =>
                                                             {
                                                                 {
-                                                                    let match_str =
-                                                                        &input[start_pos..pos];
-                                                                    Matched(pos,
-                                                                            {
-                                                                                Repeat(box() expression,
-                                                                                       0,
-                                                                                       None,
-                                                                                       None)
-                                                                            })
+                                                                    let _context =
+                                                                        state.context.clone();
+                                                                    let mut _context =
+                                                                        &mut *_context.borrow_mut();
+                                                                    {
+                                                                        let match_str =
+                                                                            &input[start_pos..pos];
+                                                                        Matched(pos,
+                                                                                {
+                                                                                    Repeat(box() expression,
+                                                                                           0,
+                                                                                           None,
+                                                                                           None)
+                                                                                })
+                                                                    }
                                                                 }
                                                             }
                                                             Failed => Failed,
@@ -2222,15 +2399,21 @@ fn parse_suffixed<'input>(input: &'input str, state: &mut ParseState,
                                                                             _)
                                                                     => {
                                                                         {
-                                                                            let match_str =
-                                                                                &input[start_pos..pos];
-                                                                            Matched(pos,
-                                                                                    {
-                                                                                        Repeat(box() expression,
-                                                                                               1,
-                                                                                               None,
-                                                                                               None)
-                                                                                    })
+                                                                            let _context =
+                                                                                state.context.clone();
+                                                                            let mut _context =
+                                                                                &mut *_context.borrow_mut();
+                                                                            {
+                                                                                let match_str =
+                                                                                    &input[start_pos..pos];
+                                                                                Matched(pos,
+                                                                                        {
+                                                                                            Repeat(box() expression,
+                                                                                                   1,
+                                                                                                   None,
+                                                                                                   None)
+                                                                                        })
+                                                                            }
                                                                         }
                                                                     }
                                                                     Failed =>
@@ -2296,15 +2479,21 @@ fn parse_suffixed<'input>(input: &'input str, state: &mut ParseState,
                                                                                                     =>
                                                                                                     {
                                                                                                         {
-                                                                                                            let match_str =
-                                                                                                                &input[start_pos..pos];
-                                                                                                            Matched(pos,
-                                                                                                                    {
-                                                                                                                        Repeat(box() expression,
-                                                                                                                               n,
-                                                                                                                               Some(n),
-                                                                                                                               None)
-                                                                                                                    })
+                                                                                                            let _context =
+                                                                                                                state.context.clone();
+                                                                                                            let mut _context =
+                                                                                                                &mut *_context.borrow_mut();
+                                                                                                            {
+                                                                                                                let match_str =
+                                                                                                                    &input[start_pos..pos];
+                                                                                                                Matched(pos,
+                                                                                                                        {
+                                                                                                                            Repeat(box() expression,
+                                                                                                                                   n,
+                                                                                                                                   Some(n),
+                                                                                                                                   None)
+                                                                                                                        })
+                                                                                                            }
                                                                                                         }
                                                                                                     }
                                                                                                     Failed
@@ -2423,15 +2612,21 @@ fn parse_suffixed<'input>(input: &'input str, state: &mut ParseState,
                                                                                                                                     =>
                                                                                                                                     {
                                                                                                                                         {
-                                                                                                                                            let match_str =
-                                                                                                                                                &input[start_pos..pos];
-                                                                                                                                            Matched(pos,
-                                                                                                                                                    {
-                                                                                                                                                        Repeat(box() expression,
-                                                                                                                                                               min,
-                                                                                                                                                               max,
-                                                                                                                                                               None)
-                                                                                                                                                    })
+                                                                                                                                            let _context =
+                                                                                                                                                state.context.clone();
+                                                                                                                                            let mut _context =
+                                                                                                                                                &mut *_context.borrow_mut();
+                                                                                                                                            {
+                                                                                                                                                let match_str =
+                                                                                                                                                    &input[start_pos..pos];
+                                                                                                                                                Matched(pos,
+                                                                                                                                                        {
+                                                                                                                                                            Repeat(box() expression,
+                                                                                                                                                                   min,
+                                                                                                                                                                   max,
+                                                                                                                                                                   None)
+                                                                                                                                                        })
+                                                                                                                                            }
                                                                                                                                         }
                                                                                                                                     }
                                                                                                                                     Failed
@@ -2555,15 +2750,21 @@ fn parse_suffixed<'input>(input: &'input str, state: &mut ParseState,
                                                                                                                                 =>
                                                                                                                                 {
                                                                                                                                     {
-                                                                                                                                        let match_str =
-                                                                                                                                            &input[start_pos..pos];
-                                                                                                                                        Matched(pos,
-                                                                                                                                                {
-                                                                                                                                                    Repeat(box() expression,
-                                                                                                                                                           0,
-                                                                                                                                                           max,
-                                                                                                                                                           None)
-                                                                                                                                                })
+                                                                                                                                        let _context =
+                                                                                                                                            state.context.clone();
+                                                                                                                                        let mut _context =
+                                                                                                                                            &mut *_context.borrow_mut();
+                                                                                                                                        {
+                                                                                                                                            let match_str =
+                                                                                                                                                &input[start_pos..pos];
+                                                                                                                                            Matched(pos,
+                                                                                                                                                    {
+                                                                                                                                                        Repeat(box() expression,
+                                                                                                                                                               0,
+                                                                                                                                                               max,
+                                                                                                                                                               None)
+                                                                                                                                                    })
+                                                                                                                                        }
                                                                                                                                     }
                                                                                                                                 }
                                                                                                                                 Failed
@@ -2692,10 +2893,18 @@ fn parse_primary<'input>(input: &'input str, state: &mut ParseState,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        { RuleExpr(name) })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                RuleExpr(name)
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -2727,12 +2936,18 @@ fn parse_primary<'input>(input: &'input str, state: &mut ParseState,
                                                 match seq_res {
                                                     Matched(pos, _) => {
                                                         {
-                                                            let match_str =
-                                                                &input[start_pos..pos];
-                                                            Matched(pos,
-                                                                    {
-                                                                        AnyCharExpr
-                                                                    })
+                                                            let _context =
+                                                                state.context.clone();
+                                                            let mut _context =
+                                                                &mut *_context.borrow_mut();
+                                                            {
+                                                                let match_str =
+                                                                    &input[start_pos..pos];
+                                                                Matched(pos,
+                                                                        {
+                                                                            AnyCharExpr
+                                                                        })
+                                                            }
                                                         }
                                                     }
                                                     Failed => Failed,
@@ -2771,12 +2986,18 @@ fn parse_primary<'input>(input: &'input str, state: &mut ParseState,
                                                                             =>
                                                                             {
                                                                                 {
-                                                                                    let match_str =
-                                                                                        &input[start_pos..pos];
-                                                                                    Matched(pos,
-                                                                                            {
-                                                                                                expression
-                                                                                            })
+                                                                                    let _context =
+                                                                                        state.context.clone();
+                                                                                    let mut _context =
+                                                                                        &mut *_context.borrow_mut();
+                                                                                    {
+                                                                                        let match_str =
+                                                                                            &input[start_pos..pos];
+                                                                                        Matched(pos,
+                                                                                                {
+                                                                                                    expression
+                                                                                                })
+                                                                                    }
                                                                                 }
                                                                             }
                                                                             Failed
@@ -2890,30 +3111,36 @@ fn parse_action<'input>(input: &'input str, state: &mut ParseState,
                                                                         _) =>
                                                                 {
                                                                     {
-                                                                        let match_str =
-                                                                            &input[start_pos..pos];
-                                                                        Matched(pos,
-                                                                                {
-                                                                                    match cond
-                                                                                        {
-                                                                                        Some(_)
-                                                                                        =>
-                                                                                        {
-                                                                                            let mut cond =
-                                                                                                String::with_capacity(match_str.len()
-                                                                                                                          -
-                                                                                                                          1);
-                                                                                            cond.push_str("{");
-                                                                                            cond.push_str(&match_str[2..]);
-                                                                                            (cond,
-                                                                                             true)
+                                                                        let _context =
+                                                                            state.context.clone();
+                                                                        let mut _context =
+                                                                            &mut *_context.borrow_mut();
+                                                                        {
+                                                                            let match_str =
+                                                                                &input[start_pos..pos];
+                                                                            Matched(pos,
+                                                                                    {
+                                                                                        match cond
+                                                                                            {
+                                                                                            Some(_)
+                                                                                            =>
+                                                                                            {
+                                                                                                let mut cond =
+                                                                                                    String::with_capacity(match_str.len()
+                                                                                                                              -
+                                                                                                                              1);
+                                                                                                cond.push_str("{");
+                                                                                                cond.push_str(&match_str[2..]);
+                                                                                                (cond,
+                                                                                                 true)
+                                                                                            }
+                                                                                            None
+                                                                                            =>
+                                                                                            (match_str.to_string(),
+                                                                                             false),
                                                                                         }
-                                                                                        None
-                                                                                        =>
-                                                                                        (match_str.to_string(),
-                                                                                         false),
-                                                                                    }
-                                                                                })
+                                                                                    })
+                                                                        }
                                                                     }
                                                                 }
                                                                 Failed =>
@@ -2995,12 +3222,18 @@ fn parse_braced<'input>(input: &'input str, state: &mut ParseState,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            match_str.to_string()
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                match_str.to_string()
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -3282,9 +3515,17 @@ fn parse_integer<'input>(input: &'input str, state: &mut ParseState,
                         match seq_res {
                             Matched(pos, _) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos,
-                                            { match_str.parse().unwrap() })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos,
+                                                {
+                                                    match_str.parse().unwrap()
+                                                })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -3298,8 +3539,14 @@ fn parse_integer<'input>(input: &'input str, state: &mut ParseState,
                         match seq_res {
                             Matched(pos, _) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos, { i })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos, { i })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -3384,12 +3631,18 @@ fn parse_identifier<'input>(input: &'input str, state: &mut ParseState,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            match_str.to_string()
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                match_str.to_string()
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -3407,8 +3660,14 @@ fn parse_identifier<'input>(input: &'input str, state: &mut ParseState,
                         match seq_res {
                             Matched(pos, _) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos, { chars })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos, { chars })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -3451,13 +3710,19 @@ fn parse_literal<'input>(input: &'input str, state: &mut ParseState,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            LiteralExpr(value,
-                                                                        case_insensitive.is_some())
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                LiteralExpr(value,
+                                                                            case_insensitive.is_some())
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -3494,8 +3759,14 @@ fn parse_string<'input>(input: &'input str, state: &mut ParseState,
                         match seq_res {
                             Matched(pos, _) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos, { string })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos, { string })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -3545,12 +3816,18 @@ fn parse_doubleQuotedString<'input>(input: &'input str,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            s.into_iter().collect()
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                s.into_iter().collect()
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -3673,11 +3950,17 @@ fn parse_simpleDoubleQuotedCharacter<'input>(input: &'input str,
                         match seq_res {
                             Matched(pos, _) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos,
-                                            {
-                                                match_str.chars().next().unwrap()
-                                            })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos,
+                                                {
+                                                    match_str.chars().next().unwrap()
+                                                })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -3727,12 +4010,18 @@ fn parse_singleQuotedString<'input>(input: &'input str,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            s.into_iter().collect()
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                s.into_iter().collect()
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -3855,11 +4144,17 @@ fn parse_simpleSingleQuotedCharacter<'input>(input: &'input str,
                         match seq_res {
                             Matched(pos, _) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos,
-                                            {
-                                                match_str.chars().next().unwrap()
-                                            })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos,
+                                                {
+                                                    match_str.chars().next().unwrap()
+                                                })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -3967,13 +4262,19 @@ fn parse_class<'input>(input: &'input str, state: &mut ParseState, pos: usize)
                                                                             =>
                                                                             {
                                                                                 {
-                                                                                    let match_str =
-                                                                                        &input[start_pos..pos];
-                                                                                    Matched(pos,
-                                                                                            {
-                                                                                                CharSetExpr(inverted.is_some(),
-                                                                                                            parts)
-                                                                                            })
+                                                                                    let _context =
+                                                                                        state.context.clone();
+                                                                                    let mut _context =
+                                                                                        &mut *_context.borrow_mut();
+                                                                                    {
+                                                                                        let match_str =
+                                                                                            &input[start_pos..pos];
+                                                                                        Matched(pos,
+                                                                                                {
+                                                                                                    CharSetExpr(inverted.is_some(),
+                                                                                                                parts)
+                                                                                                })
+                                                                                    }
                                                                                 }
                                                                             }
                                                                             Failed
@@ -4025,15 +4326,21 @@ fn parse_classCharacterRange<'input>(input: &'input str,
                                     match seq_res {
                                         Matched(pos, end) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            CharSetCase{start:
-                                                                            begin,
-                                                                        end:
-                                                                            end,}
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                CharSetCase{start:
+                                                                                begin,
+                                                                            end:
+                                                                                end,}
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -4058,9 +4365,15 @@ fn parse_classCharacter<'input>(input: &'input str, state: &mut ParseState,
             match seq_res {
                 Matched(pos, char_) => {
                     {
-                        let match_str = &input[start_pos..pos];
-                        Matched(pos,
-                                { CharSetCase{start: char_, end: char_,} })
+                        let _context = state.context.clone();
+                        let mut _context = &mut *_context.borrow_mut();
+                        {
+                            let match_str = &input[start_pos..pos];
+                            Matched(pos,
+                                    {
+                                        CharSetCase{start: char_, end: char_,}
+                                    })
+                        }
                     }
                 }
                 Failed => Failed,
@@ -4176,11 +4489,17 @@ fn parse_simpleBracketDelimitedCharacter<'input>(input: &'input str,
                         match seq_res {
                             Matched(pos, _) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos,
-                                            {
-                                                match_str.chars().next().unwrap()
-                                            })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos,
+                                                {
+                                                    match_str.chars().next().unwrap()
+                                                })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -4266,18 +4585,27 @@ fn parse_simpleEscapeSequence<'input>(input: &'input str,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            match match_str[1..].chars().next().unwrap()
-                                                                {
-                                                                'n' => '\n',
-                                                                'r' => '\r',
-                                                                't' => '\t',
-                                                                x => x,
-                                                            }
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                match match_str[1..].chars().next().unwrap()
+                                                                    {
+                                                                    'n' =>
+                                                                    '\n',
+                                                                    'r' =>
+                                                                    '\r',
+                                                                    't' =>
+                                                                    '\t',
+                                                                    x => x,
+                                                                }
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -4315,8 +4643,14 @@ fn parse_zeroEscapeSequence<'input>(input: &'input str,
                         match seq_res {
                             Matched(pos, _) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos, { 0u8 as char })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos, { 0u8 as char })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -4354,13 +4688,19 @@ fn parse_hex2EscapeSequence<'input>(input: &'input str,
                                                 match seq_res {
                                                     Matched(pos, _) => {
                                                         {
-                                                            let match_str =
-                                                                &input[start_pos..pos];
-                                                            Matched(pos,
-                                                                    {
-                                                                        u32::from_str_radix(match_str,
-                                                                                            16)
-                                                                    })
+                                                            let _context =
+                                                                state.context.clone();
+                                                            let mut _context =
+                                                                &mut *_context.borrow_mut();
+                                                            {
+                                                                let match_str =
+                                                                    &input[start_pos..pos];
+                                                                Matched(pos,
+                                                                        {
+                                                                            u32::from_str_radix(match_str,
+                                                                                                16)
+                                                                        })
+                                                            }
                                                         }
                                                     }
                                                     Failed => Failed,
@@ -4374,11 +4714,17 @@ fn parse_hex2EscapeSequence<'input>(input: &'input str,
                         match seq_res {
                             Matched(pos, value) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos,
-                                            {
-                                                char::from_u32(value.unwrap()).unwrap()
-                                            })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos,
+                                                {
+                                                    char::from_u32(value.unwrap()).unwrap()
+                                                })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -4430,13 +4776,19 @@ fn parse_unicodeEscapeSequence<'input>(input: &'input str,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            u32::from_str_radix(match_str,
-                                                                                16)
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                u32::from_str_radix(match_str,
+                                                                                    16)
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -4451,12 +4803,18 @@ fn parse_unicodeEscapeSequence<'input>(input: &'input str,
                                     match seq_res {
                                         Matched(pos, _) => {
                                             {
-                                                let match_str =
-                                                    &input[start_pos..pos];
-                                                Matched(pos,
-                                                        {
-                                                            char::from_u32(value.unwrap()).unwrap()
-                                                        })
+                                                let _context =
+                                                    state.context.clone();
+                                                let mut _context =
+                                                    &mut *_context.borrow_mut();
+                                                {
+                                                    let match_str =
+                                                        &input[start_pos..pos];
+                                                    Matched(pos,
+                                                            {
+                                                                char::from_u32(value.unwrap()).unwrap()
+                                                            })
+                                                }
                                             }
                                         }
                                         Failed => Failed,
@@ -4518,13 +4876,19 @@ fn parse_hex4EscapeSequence<'input>(input: &'input str,
                                                                             =>
                                                                             {
                                                                                 {
-                                                                                    let match_str =
-                                                                                        &input[start_pos..pos];
-                                                                                    Matched(pos,
-                                                                                            {
-                                                                                                u32::from_str_radix(match_str,
-                                                                                                                    16)
-                                                                                            })
+                                                                                    let _context =
+                                                                                        state.context.clone();
+                                                                                    let mut _context =
+                                                                                        &mut *_context.borrow_mut();
+                                                                                    {
+                                                                                        let match_str =
+                                                                                            &input[start_pos..pos];
+                                                                                        Matched(pos,
+                                                                                                {
+                                                                                                    u32::from_str_radix(match_str,
+                                                                                                                        16)
+                                                                                                })
+                                                                                    }
                                                                                 }
                                                                             }
                                                                             Failed
@@ -4549,11 +4913,17 @@ fn parse_hex4EscapeSequence<'input>(input: &'input str,
                         match seq_res {
                             Matched(pos, value) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos,
-                                            {
-                                                char::from_u32(value.unwrap()).unwrap()
-                                            })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos,
+                                                {
+                                                    char::from_u32(value.unwrap()).unwrap()
+                                                })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -4655,13 +5025,19 @@ fn parse_hex8EscapeSequence<'input>(input: &'input str,
                                                                                                                             =>
                                                                                                                             {
                                                                                                                                 {
-                                                                                                                                    let match_str =
-                                                                                                                                        &input[start_pos..pos];
-                                                                                                                                    Matched(pos,
-                                                                                                                                            {
-                                                                                                                                                u32::from_str_radix(match_str,
-                                                                                                                                                                    16)
-                                                                                                                                            })
+                                                                                                                                    let _context =
+                                                                                                                                        state.context.clone();
+                                                                                                                                    let mut _context =
+                                                                                                                                        &mut *_context.borrow_mut();
+                                                                                                                                    {
+                                                                                                                                        let match_str =
+                                                                                                                                            &input[start_pos..pos];
+                                                                                                                                        Matched(pos,
+                                                                                                                                                {
+                                                                                                                                                    u32::from_str_radix(match_str,
+                                                                                                                                                                        16)
+                                                                                                                                                })
+                                                                                                                                    }
                                                                                                                                 }
                                                                                                                             }
                                                                                                                             Failed
@@ -4710,11 +5086,17 @@ fn parse_hex8EscapeSequence<'input>(input: &'input str,
                         match seq_res {
                             Matched(pos, value) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos,
-                                            {
-                                                char::from_u32(value.unwrap()).unwrap()
-                                            })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos,
+                                                {
+                                                    char::from_u32(value.unwrap()).unwrap()
+                                                })
+                                    }
                                 }
                             }
                             Failed => Failed,
@@ -4739,8 +5121,14 @@ fn parse_eolEscapeSequence<'input>(input: &'input str, state: &mut ParseState,
                         match seq_res {
                             Matched(pos, eol) => {
                                 {
-                                    let match_str = &input[start_pos..pos];
-                                    Matched(pos, { '\n' })
+                                    let _context = state.context.clone();
+                                    let mut _context =
+                                        &mut *_context.borrow_mut();
+                                    {
+                                        let match_str =
+                                            &input[start_pos..pos];
+                                        Matched(pos, { '\n' })
+                                    }
                                 }
                             }
                             Failed => Failed,
