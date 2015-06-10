@@ -450,17 +450,13 @@ fn format_char_set(invert: bool, cases: &[CharSetCase]) -> String {
 /// Compiles an ActionExpr only (with no expressions). Used for named functions.
 fn compile_action_expr(ctxt: &rustast::ExtCtxt, e: &Expr) -> rustast::P<rustast::Expr> {
 	match *e {
-		ActionExpr(ref exprs, ref code, _) => {
-			if exprs.len() > 0 {
-				panic!("The grammar should not allow this to happen (exprs in context rule)")
-			}
-
+		ActionExpr(_, ref code, _) => {
 			let code_block = rustast::parse_block(ctxt, code);
 			quote_expr!(ctxt, {
 				Matched(pos, $code_block)
 			})
 		},
-		_ => {panic!("The grammar should not allow this to happen (not ActionExpr as context rule)")}
+		_ => {panic!("not ActionExpr as context rule")}
 	}
 }
 

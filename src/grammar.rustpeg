@@ -7,13 +7,37 @@ grammar -> Grammar
   { Grammar{ imports:imports, rules:rules } }
 
 rule -> Rule
-  = exported:exportflag cached:cacheflag context:contextflag name:identifier returns: returntype equals expression:expression semicolon? {
-      Rule{ name: name, expr: box expression, ret_type: returns, exported: exported, cached: cached, context: context }
+  = attrs:rule_attributes name:identifier returns: returntype equals expression:expression semicolon? {?
+      match {match expression {
+          ActionExpr(ref exprs, _, _) => {
+            if attrs.2 && exprs.len() > 0 {
+              Err("code block")
+            } else {
+              Ok(())
+            }
+          },
+          _ => {
+            if attrs.2 {
+                // require context rules to be code blocks only
+                Err("code block")
+            } else {
+              Ok(())
+            }
+          }
+      }} {
+        Ok(_) => {
+          Ok(Rule{ name: name, expr: box expression, ret_type: returns, exported: attrs.0, cached: attrs.1, context: attrs.2 })
+        },
+        Err(e) => Err(e)
+      }
     }
 
     exportflag -> bool = ("#[export]"/"#[pub]") __ {true} / "" {false}
     cacheflag -> bool = "#[cache]" __ {true} / {false}
     contextflag -> bool = "#[context]" __ {true} / {false}
+
+rule_attributes -> (bool, bool, bool)
+  = context:contextflag exported:exportflag cached:cacheflag {? if context && (exported || cached) {Err("attributes")} else {Ok((exported, cached, context))}}
 
 returntype -> String
   = returns tp:(rust_type {match_str.trim().to_string()}) { tp }
