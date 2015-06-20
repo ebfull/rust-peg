@@ -11,7 +11,7 @@ rule -> Rule
       match {match expression {
           ActionExpr(ref exprs, _, _) => {
             if attrs.2 && exprs.len() > 0 {
-              Err("code block")
+              Err("code block".to_string())
             } else {
               Ok(())
             }
@@ -19,7 +19,7 @@ rule -> Rule
           _ => {
             if attrs.2 {
                 // require context rules to be code blocks only
-                Err("code block")
+                Err("code block".to_string())
             } else {
               Ok(())
             }
