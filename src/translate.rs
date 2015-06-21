@@ -203,6 +203,7 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 			pub column: usize,
 			pub offset: usize,
 			pub expected: ::std::collections::HashSet<String>,
+			pub msg: Option<String>
 		}
 	).unwrap());
 
@@ -213,7 +214,11 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 	items.push(quote_item!(ctxt,
 		impl ::std::fmt::Display for ParseError {
 			fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::result::Result<(), ::std::fmt::Error> {
-				try!(write!(fmt, "error at {}:{}: expected ", self.line, self.column));
+				match self.msg {
+				    Some(ref msg) => {return write!(fmt, "Error at {}:{}: {}", self.line, self.column, msg);},
+				    None => ()
+				}
+				try!(write!(fmt, "Error at {}:{}: expected ", self.line, self.column));
 				if self.expected.len() == 1 {
 					try!(write!(fmt, "`{}`", escape_default(self.expected.iter().next().unwrap())));
 				} else {
@@ -397,6 +402,7 @@ fn compile_rule_export(ctxt: &rustast::ExtCtxt, rule: &Rule) -> rustast::P<rusta
 				column: col,
 				offset: state.max_err_pos,
 				expected: state.expected,
+				msg: None
 			})
 		}
 	)).unwrap()
