@@ -116,7 +116,7 @@ fn make_parse_state(ctxt: &rustast::ExtCtxt, rules: &[Rule]) -> Vec<rustast::P<r
 	items.push(quote_item!(ctxt,
 		struct ParseState {
 			max_err_pos: usize,
-			expected: ::std::collections::HashSet<&'static str>,
+			expected: ::std::collections::HashSet<String>,
 			$cache_fields
 			context: ::std::rc::Rc<::std::cell::RefCell<ContextObjects>>
 		}
@@ -142,7 +142,7 @@ fn make_parse_state(ctxt: &rustast::ExtCtxt, rules: &[Rule]) -> Vec<rustast::P<r
 					}))
 				}
 			}
-			fn mark_failure(&mut self, pos: usize, expected: &'static str) -> RuleResult<()> {
+			fn mark_failure(&mut self, pos: usize, expected: String) -> RuleResult<()> {
 				if pos > self.max_err_pos {
 					self.max_err_pos = pos;
 					self.expected.clear();
@@ -202,7 +202,8 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 			pub line: usize,
 			pub column: usize,
 			pub offset: usize,
-			pub expected: ::std::collections::HashSet<&'static str>,
+			pub expected: ::std::collections::HashSet<String>,
+			pub msg: Option<String>
 		}
 	).unwrap());
 
@@ -213,7 +214,11 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 	items.push(quote_item!(ctxt,
 		impl ::std::fmt::Display for ParseError {
 			fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::result::Result<(), ::std::fmt::Error> {
-				try!(write!(fmt, "error at {}:{}: expected ", self.line, self.column));
+				match self.msg {
+				    Some(ref msg) => {return write!(fmt, "Error at {}:{}: {}", self.line, self.column, msg);},
+				    None => ()
+				}
+				try!(write!(fmt, "Error at {}:{}: expected ", self.line, self.column));
 				if self.expected.len() == 1 {
 					try!(write!(fmt, "`{}`", escape_default(self.expected.iter().next().unwrap())));
 				} else {
@@ -239,7 +244,7 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 	).unwrap());
 
 	items.push(quote_item!(ctxt,
-		fn slice_eq(input: &str, state: &mut ParseState, pos: usize, m: &'static str) -> RuleResult<()> {
+		fn slice_eq(input: &str, state: &mut ParseState, pos: usize, m: String) -> RuleResult<()> {
 			#![inline]
 			#![allow(dead_code)]
 
@@ -253,7 +258,7 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 	).unwrap());
 
 	items.push(quote_item!(ctxt,
-		fn slice_eq_case_insensitive(input: &str, state: &mut ParseState, pos: usize, m: &'static str) -> RuleResult<()> {
+		fn slice_eq_case_insensitive(input: &str, state: &mut ParseState, pos: usize, m: String) -> RuleResult<()> {
 			#![inline]
 			#![allow(dead_code)]
 
@@ -266,7 +271,7 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 				let input_char_result = input_iter.next();
 
 				if input_char_result.is_none() || input_char_result.unwrap() != m_char_upper {
-					return state.mark_failure(pos, m);
+					return state.mark_failure(pos, m.clone());
 				}
 			}
 
@@ -284,7 +289,7 @@ pub fn header_items(ctxt: &rustast::ExtCtxt) -> Vec<rustast::P<rustast::Item>> {
 				let (_, next) = char_range_at(input, pos);
 				Matched(next, ())
 			} else {
-				state.mark_failure(pos, "<character>")
+				state.mark_failure(pos, "<character>".to_string())
 			}
 		}
 	).unwrap());
@@ -397,6 +402,7 @@ fn compile_rule_export(ctxt: &rustast::ExtCtxt, rule: &Rule) -> rustast::P<rusta
 				column: col,
 				offset: state.max_err_pos,
 				expected: state.expected,
+				msg: None
 			})
 		}
 	)).unwrap()
@@ -478,10 +484,10 @@ fn compile_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_use
 		LiteralExpr(ref s, ref case_insensitive) => {
 			let sl: &str = &s;
 			if *case_insensitive {
-				quote_expr!(ctxt, slice_eq_case_insensitive(input, state, pos, $sl))
+				quote_expr!(ctxt, slice_eq_case_insensitive(input, state, pos, $sl.to_string()))
 			}
 			else {
-				quote_expr!(ctxt, slice_eq(input, state, pos, $sl))
+				quote_expr!(ctxt, slice_eq(input, state, pos, $sl.to_string()))
 			}
 		}
 
@@ -491,7 +497,7 @@ fn compile_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_use
 
 			let (in_set, not_in_set) = cond_swap(invert, (
 				quote_expr!(ctxt, Matched(next, ())),
-				quote_expr!(ctxt, state.mark_failure(pos, $expected_str)),
+				quote_expr!(ctxt, state.mark_failure(pos, $expected_str.to_string())),
 			));
 
 			let m = ctxt.expr_match(DUMMY_SP, quote_expr!(ctxt, ch), vec!(
@@ -512,7 +518,7 @@ fn compile_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_use
 				let (ch, next) = char_range_at(input, pos);
 				$m
 			} else {
-				state.mark_failure(pos, $expected_str)
+				state.mark_failure(pos, $expected_str.to_string())
 			})
 		}
 
@@ -720,7 +726,7 @@ fn compile_expr(ctxt: &rustast::ExtCtxt, grammar: &Grammar, e: &Expr, result_use
 								match $code_block {
 									Ok(res) => Matched(pos, res),
 									Err(expected) => {
-										state.mark_failure(pos, expected);
+										state.mark_failure(pos, expected.to_string());
 										Failed
 									},
 								}
